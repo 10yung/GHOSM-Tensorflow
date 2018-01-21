@@ -22,7 +22,6 @@ class GHSOM(object):
         filter_map_n = self._n
         filter_map_size = np.array(list(self.som_neuron_locations(filter_map_m, filter_map_n)))
 
-        
         # INITIALIZE CHECK TAU1  GRAPH
         tau1_check_graph = tf.Graph()
 
@@ -50,41 +49,63 @@ class GHSOM(object):
                     , [-1, 10,1])
                 , [1, 1, self._dim])
 
-            # 2. use filter_map to map data to cluster
-            # i = tf.constant(0)
-            # cond = lambda i: tf.less(i, filter_map_m*filter_map_n)
-            # body = lambda i: tf.boolean_mask(
-            #                         input_data_tf,
-            #                         tf.slice(filter_map, [i, 0, 0], [1, self._input_num ,self._dim])
-            #                 )
-            # r = tf.while_loop(cond, body, [i])
-            
-            group_data = tf.reshape(
-                            tf.boolean_mask(
-                                    input_data_tf, 
-                                    tf.squeeze(tf.slice(filter_map, [1, 0, 0], [1, 10, 5]))
-                                )
-                        , [ -1, self._dim])
+            # 2. use filter_map to map data to cluster and find the location of the max mqe group
+            i = tf.constant(0, dtype="int32")
+            n = tf.constant(filter_map_m*filter_map_n)
+            all_mqe = tf.TensorArray(tf.float32, n)
 
-            # group_mqe = tf.reduce_mean(
-            #         tf.sqrt(
-            #             tf.reduce_sum(
-            #                 tf.pow(
-            #                     tf.subtract(
-            #                         input_data_tf,
-            #                         tf.stack([tf.reduce_mean(group_data, 0) for i in range(tf.shape(group_data))])
-            #                     )
-            #                 ,2)
-            #             , 1, keep_dims=True)
-            #         )
-            #     , 0)
+            # define stop condition
+            def cond(i, all_mqe):
+                return i < n
+
+            def body(i, all_mqe):
+                # create filter map and find which input data belong which group
+                group_data = tf.reshape(
+                                tf.boolean_mask(
+                                        input_data_tf, 
+                                        tf.squeeze(tf.slice(filter_map, [i, 0, 0], [1, 10, 5]))
+                                    )
+                            , [ -1, self._dim])
+
+                # calculate each mqe (one group by a time)
+                group_mqe = tf.reduce_mean(
+                        tf.sqrt(
+                            tf.reduce_sum(
+                                tf.pow(
+                                    tf.subtract(
+                                        group_data,
+                                        tf.stack([tf.reduce_mean(group_data, 0)])
+                                    )
+                                ,2)
+                            , 1, keep_dims=True)
+                        )
+                    , 0)
+
+                # if mqe is Nan then return zero
+                each_group_mqe = tf.squeeze(tf.cond(
+                                    tf.is_nan(tf.squeeze(group_mqe)),
+                                    lambda: tf.constant([0], dtype="float32"),
+                                    lambda: group_mqe
+                                ))
+                
+                # write mqe to all_mqe TensorArray (just like np array, it's dynamic tf array)
+                all_mqe = all_mqe.write(i, each_group_mqe)
+
+                # return for next step
+                return i+1, all_mqe
+
+            i,  all_mqe = tf.while_loop(cond, body, (i, all_mqe))
+
+                        
+            all_mqe = all_mqe.stack()     
 
 
             tau1_sess = tf.Session()
             init_op = tf.global_variables_initializer()
             tau1_sess.run(init_op)
-            print(tau1_sess.run(tf.squeeze(tf.slice(filter_map, [1, 0, 0], [1, 10, 5]))))
-            print(tau1_sess.run(group_data))
+            print(tau1_sess.run(tf.squeeze(tf.slice(filter_map, [0, 0, 0], [1, 10, 5]))))
+            print(tau1_sess.run(all_mqe))
+
 
 
 
