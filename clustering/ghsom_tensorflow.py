@@ -30,7 +30,7 @@ class GHSOM(object):
         with tau1_check_graph.as_default():
             
             # initial all tensorflow variable
-            input_data_tf = tf.placeholder("float32")
+            input_data_tf = tf.constant(self._input_data, dtype="float32")
             tau1 = tf.constant(self._tau1, dtype="float32")
             init_som_topology_map = tf.constant(init_som_topology_map)
             weight_vector = tf.constant(weight_vector, dtype="float32")
@@ -38,21 +38,53 @@ class GHSOM(object):
             # ---
             # check each data belong to which group
             # ---
-            # 
-            #
-            tmp1 = tf.reduce_all(
-                        tf.equal(
-                            tf.stack([filter_map_size_tf for i in range(len(self._input_data))], axis=1),
-                            tf.stack([init_som_topology_map for i in range(filter_map_m*filter_map_n)])
-                        )
-                    , 2)
+            # 1. create filter_map
+            filter_map = tf.tile(
+                    tf.reshape(
+                        tf.reduce_all(
+                            tf.equal(
+                                tf.stack([filter_map_size_tf for i in range(len(self._input_data))], axis=1),
+                                tf.stack([init_som_topology_map for i in range(filter_map_m*filter_map_n)])
+                            )
+                        , 2)
+                    , [-1, 10,1])
+                , [1, 1, self._dim])
 
+            # 2. use filter_map to map data to cluster
+            # i = tf.constant(0)
+            # cond = lambda i: tf.less(i, filter_map_m*filter_map_n)
+            # body = lambda i: tf.boolean_mask(
+            #                         input_data_tf,
+            #                         tf.slice(filter_map, [i, 0, 0], [1, self._input_num ,self._dim])
+            #                 )
+            # r = tf.while_loop(cond, body, [i])
+            
+            group_data = tf.reshape(
+                            tf.boolean_mask(
+                                    input_data_tf, 
+                                    tf.squeeze(tf.slice(filter_map, [1, 0, 0], [1, 10, 5]))
+                                )
+                        , [ -1, self._dim])
+
+            # group_mqe = tf.reduce_mean(
+            #         tf.sqrt(
+            #             tf.reduce_sum(
+            #                 tf.pow(
+            #                     tf.subtract(
+            #                         input_data_tf,
+            #                         tf.stack([tf.reduce_mean(group_data, 0) for i in range(tf.shape(group_data))])
+            #                     )
+            #                 ,2)
+            #             , 1, keep_dims=True)
+            #         )
+            #     , 0)
 
 
             tau1_sess = tf.Session()
             init_op = tf.global_variables_initializer()
             tau1_sess.run(init_op)
-            print(tau1_sess.run(tmp1))
+            print(tau1_sess.run(tf.squeeze(tf.slice(filter_map, [1, 0, 0], [1, 10, 5]))))
+            print(tau1_sess.run(group_data))
 
 
 
