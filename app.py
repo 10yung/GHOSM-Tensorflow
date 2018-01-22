@@ -22,12 +22,12 @@ input_num = 10
 # init check tau2 to do first SOM
 # ---
 ghsom = GHSOM(2, 2, input_data, input_num, input_dim)
-tmp_weight_result, tmp_init_som_result = ghsom.check_tau2_condition()
+tmp_weight_result, tmp_init_som_result, prev_mqe = ghsom.check_tau2_condition()
 
 # ---
 # check tau1 condition and do horizontal expand
 # ---
-ghsom.check_tau1_condition(tmp_init_som_result, tmp_weight_result)
+ghsom.check_tau1_condition(tmp_init_som_result, tmp_weight_result, prev_mqe)
 
 # ---
 # save first layer result

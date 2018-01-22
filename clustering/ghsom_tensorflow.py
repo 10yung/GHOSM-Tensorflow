@@ -15,11 +15,14 @@ class GHSOM(object):
         self._tau2 = tau2
 
 
-    def check_tau1_condition(self, init_som_topology_map, weight_vector):
+    def check_tau1_condition(self, init_som_topology_map, weight_vector, prev_mqe, m=None, n=None):
         
         # INITIALIZE FILTER MAP FOR LATER USE
-        filter_map_m = self._m
-        filter_map_n = self._n
+        if m is None:
+            filter_map_m = self._m
+        if n is None:
+            filter_map_n = self._n
+
         filter_map_size = np.array(list(self.som_neuron_locations(filter_map_m, filter_map_n)))
 
         # INITIALIZE CHECK TAU1  GRAPH
@@ -31,19 +34,20 @@ class GHSOM(object):
             # initial all tensorflow variable
             input_data_tf = tf.constant(self._input_data, dtype="float32")
             tau1 = tf.constant(self._tau1, dtype="float32")
-            init_som_topology_map = tf.constant(init_som_topology_map)
-            weight_vector = tf.constant(weight_vector, dtype="float32")
-            filter_map_size_tf = tf.Variable(filter_map_size)
+            init_som_topology_map_tf = tf.constant(init_som_topology_map)
+            weight_vector_tf = tf.constant(weight_vector, dtype="float32")
+            topology_map_size_tf = tf.constant(filter_map_size)
+            mqe0_tf = tf.constant(prev_mqe, dtype="float32")
             # ---
             # check each data belong to which group
-            # ---
+            # ---a
             # 1. create filter_map
             filter_map = tf.tile(
                     tf.reshape(
                         tf.reduce_all(
                             tf.equal(
-                                tf.stack([filter_map_size_tf for i in range(len(self._input_data))], axis=1),
-                                tf.stack([init_som_topology_map for i in range(filter_map_m*filter_map_n)])
+                                tf.stack([topology_map_size_tf for i in range(len(self._input_data))], axis=1),
+                                tf.stack([init_som_topology_map_tf for i in range(filter_map_m*filter_map_n)])
                             )
                         , 2)
                     , [-1, 10,1])
@@ -95,20 +99,43 @@ class GHSOM(object):
                 return i+1, all_mqe
 
             i,  all_mqe = tf.while_loop(cond, body, (i, all_mqe))
-
                         
-            all_mqe = all_mqe.stack()     
+            mean_mqe = tf.reduce_mean(all_mqe.stack())
 
+            # compare to check tau1 condition
+            tau1_cond = tf.cond(
+                                tf.less(mqe0_tf, tf.multiply(mqe0_tf, tau1)),
+                                lambda: self.satisfy_tau1_cond(), 
+                                lambda: self.horizontal_expand(init_som_topology_map_tf, weight_vector_tf, mqe0_tf, all_mqe.stack(), input_data_tf, topology_map_size_tf)
+                            )
 
+            ##INITIALIZE SESSION
             tau1_sess = tf.Session()
             init_op = tf.global_variables_initializer()
+
+            # run session
             tau1_sess.run(init_op)
-            print(tau1_sess.run(tf.squeeze(tf.slice(filter_map, [0, 0, 0], [1, 10, 5]))))
-            print(tau1_sess.run(all_mqe))
+            print(tau1_sess.run(tau1_cond))
+    
+    # expand once and then return weight vector and map size
+    def horizontal_expand(self, init_som_topology_map, weight_vector, mqe0_tf, all_mqe, input_data_tf, topology_map_size_tf):
+        # find error unit data
+        error_unit_index = tf.argmax(all_mqe)
 
+        neighborhood_location_index = tf.reduce_sum(tf.squeeze(tf.abs(
+                                        tf.subtract(
+                                            topology_map_size_tf,    
+                                            tf.stack([tf.slice(topology_map_size_tf,  [error_unit_index, 0], [1, 2])])
+                                        )))
+                                        ,1)
+                                    
+        return error_unit_index, topology_map_size_tf, neighborhood_location_index
 
+    def satisfy_tau1_cond(self):
 
+        return tf.constant(0, dtype="int64"), tf.constant(0, dtype="int64"), tf.constant(0, dtype="int64")
 
+    # ----------------------------------------------------------------------------------------------------------------------------------------------
     def check_tau2_condition(self, mqe0=None):
     
         ##INITIALIZE CHECK TAU2 GRAPH
@@ -142,8 +169,8 @@ class GHSOM(object):
 
             # check if mqe less than previous mqe
             tau2_cond = tf.cond(
-                                tf.less(mqe[0], tf.multiply(mqe[0], self._tau2)),
-                                lambda: self.satisfy_tau2_cond('test'), 
+                                tf.less(mqe[0], tf.multiply(mqe[0], tau2)),
+                                lambda: self.satisfy_tau2_cond(), 
                                 lambda: self.call_som(self._m, self._n, self._input_data, self._dim)
                             )
 
@@ -152,14 +179,15 @@ class GHSOM(object):
 
             # run session
             ini_trained_weight, ini_som_result = tau2_sess.run(tau2_cond, feed_dict={input_data_tf: self._input_data})
+            mqe = tau2_sess.run(mqe[0], feed_dict={input_data_tf: self._input_data})
             
-            return ini_trained_weight, ini_som_result
+            return ini_trained_weight, ini_som_result, mqe
 
 
     # called when tau2 condition is satisfy
-    def satisfy_tau2_cond(self, test): 
+    def satisfy_tau2_cond(self): 
         print('satisfy tau2')
-        return tf.constant(1, dtype="float32"), tf.constant(2, dtype="int64")
+        return tf.constant(0, dtype="float32"), tf.constant(0, dtype="int64")
 
 
     # do vertical expand (SOM) when tau2 condition not satisfy
