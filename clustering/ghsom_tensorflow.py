@@ -15,7 +15,7 @@ class GHSOM(object):
         self._tau2 = tau2
 
 
-    def check_tau1_condition(self, init_som_topology_map, weight_vector, prev_mqe, m=None, n=None):
+    def check_tau1_condition(self, init_som_result, weight_vector, prev_mqe, m=None, n=None):
         
         # INITIALIZE FILTER MAP FOR LATER USE
         if m is None:
@@ -34,7 +34,7 @@ class GHSOM(object):
             # initial all tensorflow variable
             input_data_tf = tf.constant(self._input_data, dtype="float32")
             tau1 = tf.constant(self._tau1, dtype="float32")
-            init_som_topology_map_tf = tf.constant(init_som_topology_map)
+            init_som_result_tf = tf.constant(init_som_result)
             weight_vector_tf = tf.constant(weight_vector, dtype="float32")
             topology_map_size_tf = tf.constant(filter_map_size)
             mqe0_tf = tf.constant(prev_mqe, dtype="float32")
@@ -47,7 +47,7 @@ class GHSOM(object):
                         tf.reduce_all(
                             tf.equal(
                                 tf.stack([topology_map_size_tf for i in range(len(self._input_data))], axis=1),
-                                tf.stack([init_som_topology_map_tf for i in range(filter_map_m*filter_map_n)])
+                                tf.stack([init_som_result_tf for i in range(filter_map_m*filter_map_n)])
                             )
                         , 2)
                     , [-1, 10,1])
@@ -106,7 +106,7 @@ class GHSOM(object):
             tau1_cond = tf.cond(
                                 tf.less(mqe0_tf, tf.multiply(mqe0_tf, tau1)),
                                 lambda: self.satisfy_tau1_cond(), 
-                                lambda: self.horizontal_expand(init_som_topology_map_tf, weight_vector_tf, mqe0_tf, all_mqe.stack(), input_data_tf, topology_map_size_tf)
+                                lambda: self.cal_horizontal_expand_vector(init_som_result_tf, weight_vector_tf, mqe0_tf, all_mqe.stack(), input_data_tf, topology_map_size_tf, filter_map_m, filter_map_n)
                             )
 
             ##INITIALIZE SESSION
@@ -115,25 +115,88 @@ class GHSOM(object):
 
             # run session
             tau1_sess.run(init_op)
-            print(tau1_sess.run(tau1_cond))
+            # print(tau1_sess.run(tau1_cond))
+            return tau1_sess.run(tau1_cond)
     
     # expand once and then return weight vector and map size
-    def horizontal_expand(self, init_som_topology_map, weight_vector, mqe0_tf, all_mqe, input_data_tf, topology_map_size_tf):
+    def cal_horizontal_expand_vector(self, init_som_result, weight_vector, mqe0_tf, all_mqe, input_data_tf, topology_map_size_tf, filter_map_m, filter_map_n):
         # find error unit data
         error_unit_index = tf.argmax(all_mqe)
 
-        neighborhood_location_index = tf.reduce_sum(tf.squeeze(tf.abs(
+        neighborhood_distance = tf.reduce_sum(tf.squeeze(tf.abs(
                                         tf.subtract(
                                             topology_map_size_tf,    
                                             tf.stack([tf.slice(topology_map_size_tf,  [error_unit_index, 0], [1, 2])])
                                         )))
                                         ,1)
+        # find the index which point is 1 distance between error unit 
+        neighborhoods_location_index = tf.where(tf.equal(neighborhood_distance, tf.stack(tf.constant(1, dtype="int64"))))
+        
+        error_unit_weight = tf.slice(weight_vector, [error_unit_index, 0], [1, -1])
+
+        neighborhoods_weight = tf.gather(weight_vector, neighborhoods_location_index)
+        
+        dissimilar_neighborbood_index = tf.squeeze(tf.gather(
+                    neighborhoods_location_index,
+                    tf.argmax(tf.reduce_sum(tf.squeeze(tf.pow(
+                            tf.subtract(tf.stack([error_unit_weight]), neighborhoods_weight)
+                        , 2))
+                    , 1))))
+        
+        insert_direction, insert_weight_vector, error_unit_index, dissimilar_neighborbood_index, pivot_point, start_point, lower_section_weight_vector, upper_section_weight_vector = tf.cond(
+                                tf.equal(tf.constant(1, dtype="int64"), tf.abs(tf.subtract(error_unit_index, dissimilar_neighborbood_index))),
+                                lambda: self.insert_x_direction(error_unit_index, dissimilar_neighborbood_index, weight_vector, filter_map_m, filter_map_n), 
+                                lambda: self.insert_y_direction(error_unit_index, dissimilar_neighborbood_index, weight_vector, filter_map_m, filter_map_n)
+                            )
+
                                     
-        return error_unit_index, topology_map_size_tf, neighborhood_location_index
+        return tf.constant(0, dtype="int32"), topology_map_size_tf, weight_vector, insert_weight_vector, insert_direction, error_unit_index, dissimilar_neighborbood_index, pivot_point, start_point, filter_map_m, filter_map_n, lower_section_weight_vector, upper_section_weight_vector
 
     def satisfy_tau1_cond(self):
 
-        return tf.constant(0, dtype="int64"), tf.constant(0, dtype="int64"), tf.constant(0, dtype="int64")
+        return tf.constant(1, dtype="int32"), tf.constant(0, dtype="int64"), tf.constant(0, dtype="float32"), tf.constant(0, dtype="float32"), tf.constant(0, dtype="int64"), tf.constant(0, dtype="int64"), tf.constant(0, dtype="int64"),tf.constant(0, dtype="int64"), tf.constant(0, dtype="int64"), tf.constant(0, dtype="int32"), tf.constant(0, dtype="int32"), tf.constant(0, dtype="float32"), tf.constant(0, dtype="float32")
+
+    def insert_y_direction(self, error_unit_index, dissimilar_neighborbood_index, weight_vector, filter_map_m, filter_map_n):
+        # find pivot point
+        pivot_point = tf.cond(
+                    tf.less(error_unit_index, dissimilar_neighborbood_index),
+                    lambda: error_unit_index,
+                    lambda: dissimilar_neighborbood_index
+                )
+        # find remainder as the start point and n(y direction as stride) each step
+        start_point = tf.multiply(tf.floordiv(pivot_point, filter_map_n), filter_map_n)
+        lower_weight_vector = tf.slice(weight_vector, [start_point,0], [filter_map_n, -1])
+        upper_weight_vector =  tf.slice(weight_vector, [tf.add(start_point, tf.constant(filter_map_n, dtype="int64")),0], [filter_map_n, weight_vector.get_shape()[1]])
+        insert_weight_vector = tf.div(tf.add(upper_weight_vector, lower_weight_vector), tf.constant(2, dtype="float32"))
+        
+        # slice to two section
+        test= tf.cast(tf.subtract(weight_vector.get_shape()[0], tf.cast(tf.add(start_point, tf.constant(filter_map_n, dtype="int64")), tf.int32)), tf.int32)
+        lower_section_weight_vector = tf.slice(weight_vector, [0,0], [tf.cast(tf.add(start_point,tf.constant(filter_map_n, dtype="int64")), tf.int32), -1])
+        upper_section_weight_vector = tf.slice(weight_vector, [tf.cast(tf.add(start_point,tf.constant(filter_map_n, dtype="int64")) , tf.int32),0], [test, -1])
+
+        return tf.constant(1, dtype="int64"), insert_weight_vector, error_unit_index, dissimilar_neighborbood_index, pivot_point, start_point, lower_section_weight_vector, upper_section_weight_vector
+
+    def insert_x_direction(self, error_unit_index, dissimilar_neighborbood_index, weight_vector, filter_map_m, filter_map_n):
+        # find pivot point
+        pivot_point = tf.cond(
+                    tf.less(error_unit_index, dissimilar_neighborbood_index),
+                    lambda: error_unit_index,
+                    lambda: dissimilar_neighborbood_index
+                )
+        # find remainder as the start point and n(y direction as stride) each step
+        start_point = tf.mod(pivot_point, filter_map_n)
+        upper_start_point = tf.add(start_point,tf.constant(1, dtype="int64"))
+        square_m_n = tf.cast(tf.multiply(tf.subtract(filter_map_m, 1), filter_map_n), tf.int64)
+        test = tf.add(upper_start_point, square_m_n)
+
+        end = tf.cast(tf.add(tf.multiply(tf.subtract(filter_map_m, 1), filter_map_n), 1), tf.int64)
+        lower_weight_vector = tf.strided_slice(weight_vector, [start_point,0], [end, weight_vector.get_shape()[1]], [filter_map_n, 1])
+        upper_weight_vector = tf.strided_slice(weight_vector, [upper_start_point, 0], [tf.add(test, 1), weight_vector.get_shape()[1]], [filter_map_n, 1])
+        insert_weight_vector = tf.div(tf.add(upper_weight_vector, lower_weight_vector), tf.constant(2, dtype="float32"))
+
+        # slice to two section
+
+        return tf.constant(0, dtype="int64"), insert_weight_vector, error_unit_index, dissimilar_neighborbood_index, pivot_point, start_point, lower_weight_vector, upper_weight_vector
 
     # ----------------------------------------------------------------------------------------------------------------------------------------------
     def check_tau2_condition(self, mqe0=None):
