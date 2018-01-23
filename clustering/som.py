@@ -118,7 +118,7 @@ class SOM(object):
             learning_rate_op = tf.subtract(1.0, tf.div(self._iter_input,
                                                   self._n_iterations))
             _alpha_op = tf.multiply(alpha, learning_rate_op)
-            _sigma_op = tf.multiply(sigma, learning_rate_op)
+            _sigma_op = tf.multiply(tf.cast(sigma, tf.float32), learning_rate_op)
 
             #Construct the op that will generate a vector with learning
             #rates for all neurons, based on iteration number and location

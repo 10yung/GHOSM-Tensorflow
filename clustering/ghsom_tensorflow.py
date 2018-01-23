@@ -150,11 +150,11 @@ class GHSOM(object):
                             )
 
                                     
-        return tf.constant(0, dtype="int32"), topology_map_size_tf, weight_vector, insert_weight_vector, insert_direction, error_unit_index, dissimilar_neighborbood_index, pivot_point, start_point, filter_map_m, filter_map_n, lower_section_weight_vector, upper_section_weight_vector
+        return tf.constant(0, dtype="int32"), topology_map_size_tf, weight_vector, insert_weight_vector, insert_direction, error_unit_index, dissimilar_neighborbood_index, pivot_point, start_point, lower_section_weight_vector, upper_section_weight_vector
 
     def satisfy_tau1_cond(self):
 
-        return tf.constant(1, dtype="int32"), tf.constant(0, dtype="int64"), tf.constant(0, dtype="float32"), tf.constant(0, dtype="float32"), tf.constant(0, dtype="int64"), tf.constant(0, dtype="int64"), tf.constant(0, dtype="int64"),tf.constant(0, dtype="int64"), tf.constant(0, dtype="int64"), tf.constant(0, dtype="int32"), tf.constant(0, dtype="int32"), tf.constant(0, dtype="float32"), tf.constant(0, dtype="float32")
+        return tf.constant(1, dtype="int32"), tf.constant(0, dtype="int64"), tf.constant(0, dtype="float32"), tf.constant(0, dtype="float32"), tf.constant(0, dtype="int64"), tf.constant(0, dtype="int64"), tf.constant(0, dtype="int64"),tf.constant(0, dtype="int64"), tf.constant(0, dtype="int64"), tf.constant(0, dtype="float32"), tf.constant(0, dtype="float32")
 
     def insert_y_direction(self, error_unit_index, dissimilar_neighborbood_index, weight_vector, filter_map_m, filter_map_n):
         # find pivot point
@@ -188,7 +188,6 @@ class GHSOM(object):
         upper_start_point = tf.add(start_point,tf.constant(1, dtype="int64"))
         square_m_n = tf.cast(tf.multiply(tf.subtract(filter_map_m, 1), filter_map_n), tf.int64)
         test = tf.add(upper_start_point, square_m_n)
-
         end = tf.cast(tf.add(tf.multiply(tf.subtract(filter_map_m, 1), filter_map_n), 1), tf.int64)
         lower_weight_vector = tf.strided_slice(weight_vector, [start_point,0], [end, weight_vector.get_shape()[1]], [filter_map_n, 1])
         upper_weight_vector = tf.strided_slice(weight_vector, [upper_start_point, 0], [tf.add(test, 1), weight_vector.get_shape()[1]], [filter_map_n, 1])
