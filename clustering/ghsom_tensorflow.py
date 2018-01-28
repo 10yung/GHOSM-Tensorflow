@@ -55,7 +55,7 @@ class GHSOM(object):
             # 2. use filter_map to map data to cluster and find the location of the max mqe group
             i = tf.constant(0, dtype="int32")
             n = tf.constant(filter_map_m*filter_map_n)
-            all_mqe = tf.TensorArray(tf.float32, n)
+            all_mqe = tf.TensorArray(tf.float32, n, clear_after_read=False)
 
             # define stop condition
             def cond(i, all_mqe):
@@ -97,14 +97,14 @@ class GHSOM(object):
                 # return for next step
                 return i+1, all_mqe
 
-            i,  all_mqe = tf.while_loop(cond, body, (i, all_mqe))
+            i,  all_mqe_tmp = tf.while_loop(cond, body, (i, all_mqe))
                         
-            mean_mqe = tf.reduce_mean(all_mqe.stack())
+            mean_mqe = tf.reduce_mean(all_mqe_tmp.stack())
 
             # compare to check tau1 condition
             tau1_cond = tf.cond(
-                                tf.less(mqe0_tf, tf.multiply(mqe0_tf, tau1)),
-                                lambda: self.satisfy_tau1_cond(), 
+                                tf.less(mean_mqe, tf.multiply(mqe0_tf, tau1)),
+                                lambda: self.satisfy_tau1_cond(filter_map, init_som_result_tf, weight_vector_tf, mqe0_tf, all_mqe.stack(), input_data_tf, topology_map_size_tf, filter_map_m, filter_map_n), 
                                 lambda: self.cal_horizontal_expand_vector(init_som_result_tf, weight_vector_tf, mqe0_tf, all_mqe.stack(), input_data_tf, topology_map_size_tf, filter_map_m, filter_map_n)
                             )
 
@@ -114,9 +114,10 @@ class GHSOM(object):
 
             # run session
             tau1_sess.run(init_op)
-            print('-------------tau1 connd result----------------')
-            print(tau1_sess(all_mqe))
-            print(tau1_sess.run(tau1_cond))
+            # print('-------------tau1 connd result----------------')
+            # print((tau1_sess.run(mean_mqe)
+            # print(tau1_sess.run(tf.multiply(mqe0_tf, tau1)))
+            # print(tau1_sess.run(tau1_cond))
             return tau1_sess.run(tau1_cond)
     
     # expand once and then return weight vector and map size
@@ -151,11 +152,12 @@ class GHSOM(object):
                             )
 
                                     
-        return tf.constant(0, dtype="int32"), topology_map_size_tf, weight_vector, insert_weight_vector, insert_direction, error_unit_index, dissimilar_neighborbood_index, pivot_point, start_point, lower_section_weight_vector, upper_section_weight_vector
+        return tf.constant(1, dtype="int32"), tf.constant(False, dtype="bool"), filter_map_m, filter_map_n, topology_map_size_tf, weight_vector, insert_weight_vector, insert_direction, error_unit_index, dissimilar_neighborbood_index, pivot_point, start_point, lower_section_weight_vector, upper_section_weight_vector
+    
+    # if satisfy tau1 condition then return filter map
+    def satisfy_tau1_cond(self, filter_map, init_som_result, weight_vector, mqe0_tf, all_mqe, input_data_tf, topology_map_size_tf, filter_map_m, filter_map_n):
 
-    def satisfy_tau1_cond(self):
-
-        return tf.constant(1, dtype="int32"), tf.constant(0, dtype="int64"), tf.constant(0, dtype="float32"), tf.constant(0, dtype="float32"), tf.constant(0, dtype="int64"), tf.constant(0, dtype="int64"), tf.constant(0, dtype="int64"),tf.constant(0, dtype="int64"), tf.constant(0, dtype="int64"), tf.constant(0, dtype="float32"), tf.constant(0, dtype="float32")
+        return tf.constant(0, dtype="int32"), filter_map, filter_map_m, filter_map_n, topology_map_size_tf, weight_vector, tf.constant(0, dtype="float32"), tf.constant(0, dtype="int64"), tf.constant(0, dtype="int64"), tf.constant(0, dtype="int64"),tf.constant(0, dtype="int64"), tf.constant(0, dtype="int64"), tf.constant(0, dtype="float32"), tf.constant(0, dtype="float32")
 
     def insert_y_direction(self, error_unit_index, dissimilar_neighborbood_index, weight_vector, filter_map_m, filter_map_n):
         # find pivot point
