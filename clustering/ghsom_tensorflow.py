@@ -14,14 +14,13 @@ class GHSOM(object):
         self._tau1 = tau1
         self._tau2 = tau2
 
+    def check_tau1_condition(self, init_som_result, weight_vector, prev_mqe, filter_map_m=None, filter_map_n=None):
 
-    def check_tau1_condition(self, init_som_result, weight_vector, prev_mqe, m=None, n=None):
-        
         # INITIALIZE FILTER MAP FOR LATER USE
-        if m is None:
-            filter_map_m = self._m
-        if n is None:
-            filter_map_n = self._n
+        # if m is None:
+        #     filter_map_m = self._m
+        # if n is None:
+        #     filter_map_n = self._n
 
         filter_map_size = np.array(list(self.som_neuron_locations(filter_map_m, filter_map_n)))
 
@@ -115,7 +114,9 @@ class GHSOM(object):
 
             # run session
             tau1_sess.run(init_op)
-            # print(tau1_sess.run(tau1_cond))
+            print('-------------tau1 connd result----------------')
+            print(tau1_sess(all_mqe))
+            print(tau1_sess.run(tau1_cond))
             return tau1_sess.run(tau1_cond)
     
     # expand once and then return weight vector and map size
