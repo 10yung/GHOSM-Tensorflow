@@ -192,7 +192,7 @@ class GHSOM(object):
         square_m_n = tf.cast(tf.multiply(tf.subtract(filter_map_m, 1), filter_map_n), tf.int64)
         test = tf.add(upper_start_point, square_m_n)
         end = tf.cast(tf.add(tf.multiply(tf.subtract(filter_map_m, 1), filter_map_n), 1), tf.int64)
-        lower_weight_vector = tf.strided_slice(weight_vector, [start_point,0], [end, weight_vector.get_shape()[1]], [filter_map_n, 1])
+        lower_weight_vector = tf.strided_slice(weight_vector, [start_point,0], [tf.add(end, start_point), weight_vector.get_shape()[1]], [filter_map_n, 1])
         upper_weight_vector = tf.strided_slice(weight_vector, [upper_start_point, 0], [tf.add(test, 1), weight_vector.get_shape()[1]], [filter_map_n, 1])
         insert_weight_vector = tf.div(tf.add(upper_weight_vector, lower_weight_vector), tf.constant(2, dtype="float32"))
 
