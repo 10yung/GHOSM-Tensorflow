@@ -1,5 +1,6 @@
 import tensorflow as tf
 import numpy as np
+import datetime
 
 
 class SOM(object):
@@ -196,14 +197,17 @@ class SOM(object):
 
         #Training iterations
         # for iter_no in range(self._n_iterations):
-            # print('LoopNo: ' + str(iter_no) + ' - Time: ' + str(datetime.datetime.now().time()))
-            #Train with each vector one by one
+        #     print('LoopNo: ' + str(iter_no) + ' - Time: ' + str(datetime.datetime.now().time()))
+        #     #Train with each vector one by one
         iter_no = 1
         print('CALL SOM')
         for input_vect in input_vects:
             self._sess.run(self._training_op,
                            feed_dict={self._vect_input: input_vect,
                                       self._iter_input: iter_no})
+            if iter_no%8000 == 0:
+                print('LoopNo: ' + str(iter_no) + ' - Time: ' + str(datetime.datetime.now().time()))
+            
             iter_no += 1
         # print('training end : ' + str(datetime.datetime.now()))
 

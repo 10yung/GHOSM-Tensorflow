@@ -14,17 +14,29 @@ from model.saveTopologyMap import saveTopologyMap
 # input preprocess
 # ---
 # change data to np array (SOM accept nparray format)
-df = pd.read_excel('./data_tmp/data.xlsx', header=None)
-input_data = np.array(df.as_matrix())
-input_dim = 5
-input_num = 10
+df = pd.read_excel('./data/WPG.xlsx')
+print('finish read file')
+df_ran = df.sample(frac=1).reset_index(drop=True)
+
+df_noimal = df_ran.ix[:, ['Report Date', 'Customer',
+                                 'Item Short Name', 'Brand', 'Sales']]
+df_numerical = df_ran.ix[:, ['Actual AWU', 'Avail.',
+                                 'BL <= 9WKs', 'Backlog', 'DC OH', 'Hub OH', 'TTL OH', 'FCST M']]
+
+input_data = np.array(df_numerical.as_matrix())
+input_dim = input_data.shape[1]
+input_num = input_data.shape[0]
 
 # ---
 # init check tau2 to do first SOM
 # ---
+print('-------------------------call check tau2------------------------------')
 ghsom = GHSOM(2, 2, input_data, input_num, input_dim)
 tmp_weight_result, tmp_init_som_result, prev_mqe = ghsom.check_tau2_condition()
 
+print(tmp_weight_result)
+print(tmp_init_som_result)
+print(prev_mqe)
 # ---
 # check tau1 condition and do horizontal expand
 # ---
@@ -32,9 +44,9 @@ filter_map_m = 2
 filter_map_n = 2
 
 # print(prev_mqe)
-
+counter = 1
 while True:
-    # print('-------------------------call check tau1------------------------------')
+    print('-------------------------call check tau1------------------------------')
     satisfy_tau1_or_not, result_filter_map, result_filter_map_m, result_filter_map_n, result_topology_map_size_tf, weight_vector, insert_weight_vector, insert_direction, error_unit_index, dissimilar_neighborbood_index, start_point, start_point, lower_section_weight_vector, upper_section_weight_vector = ghsom.check_tau1_condition(
         tmp_init_som_result, tmp_weight_result, prev_mqe, filter_map_m, filter_map_n)
 
@@ -79,17 +91,21 @@ while True:
         else:
             # print('insert y direction')
             # print(weight_vector)
-            # print('------------after insertion---------------')
+            # print('--------df1----after insertion---------------')
             tmp = np.append(lower_section_weight_vector, insert_weight_vector, axis=0)
             new_weight_after_insertion = np.append(tmp, upper_section_weight_vector, axis=0)
             # print(new_weight_after_insertion)
 
             filter_map_m = filter_map_m + 1
             filter_map_n = filter_map_n
-        
-        # print(filter_map_m)
-        # print(filter_map_n)
-        # print(new_weight_after_insertion)
+
+        if counter%100 == 0:
+            print('LoopNo: ' + str(counter) + ' - Time: ' + str(datetime.datetime.now().time()))
+
+        counter += 1
+        print(filter_map_m)
+        print(filter_map_n)
+        print(new_weight_after_insertion)
         tmp_weight_result, tmp_init_som_result = ghsom.call_som(filter_map_m, filter_map_n, input_data, input_dim, new_weight_after_insertion)
 
         # print(tmp_weight_result)
@@ -129,5 +145,6 @@ for i in range(result_filter_map.shape[0]):
 
 result = np.swapaxes(result, 0, 1)
 result_df = pd.DataFrame(result[:,1:], index= result[:,0], columns=result_header)
+result_df = pd.concat([df_noimal, result_df], axis=1)
 
-result_df.to_csv('./data_tmp/example1.csv')
+result_df.to_excel('./data/1-layer-1.xlsx', index=False)

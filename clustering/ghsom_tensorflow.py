@@ -4,7 +4,7 @@ from .som import SOM
 
 class GHSOM(object):
 
-    def __init__(self, m, n, input_data, input_num, dim, tau1=0.1, tau2=0.03):
+    def __init__(self, m, n, input_data, input_num, dim, tau1=0.9, tau2=0.3):
         #Assign required variables first
         self._m = m
         self._n = n
@@ -49,7 +49,7 @@ class GHSOM(object):
                                 tf.stack([init_som_result_tf for i in range(filter_map_m*filter_map_n)])
                             )
                         , 2)
-                    , [-1, 10,1])
+                    , [-1, self._input_num,1])
                 , [1, 1, self._dim])
 
             # 2. use filter_map to map data to cluster and find the location of the max mqe group
@@ -66,7 +66,7 @@ class GHSOM(object):
                 group_data = tf.reshape(
                                 tf.boolean_mask(
                                         input_data_tf, 
-                                        tf.squeeze(tf.slice(filter_map, [i, 0, 0], [1, 10, 5]))
+                                        tf.squeeze(tf.slice(filter_map, [i, 0, 0], [1, self._input_num, self._dim]))
                                     )
                             , [ -1, self._dim])
 
@@ -166,7 +166,7 @@ class GHSOM(object):
                     lambda: error_unit_index,
                     lambda: dissimilar_neighborbood_index
                 )
-        # find remainder as the start point and n(y direction as stride) each step
+        # find remaindeprint('satisfy tau2')r as the start point and n(y direction as stride) each step
         start_point = tf.multiply(tf.floordiv(pivot_point, filter_map_n), filter_map_n)
         lower_weight_vector = tf.slice(weight_vector, [start_point,0], [filter_map_n, -1])
         upper_weight_vector =  tf.slice(weight_vector, [tf.add(start_point, tf.constant(filter_map_n, dtype="int64")),0], [filter_map_n, weight_vector.get_shape()[1]])
@@ -251,14 +251,14 @@ class GHSOM(object):
 
     # called when tau2 condition is satisfy
     def satisfy_tau2_cond(self): 
-        print('satisfy tau2')
+
         return tf.constant(0, dtype="float32"), tf.constant(0, dtype="int64")
 
 
     # do vertical expand (SOM) when tau2 condition not satisfy
     def call_som(self, m, n, input_data, dim, weight_after_insertion=None, alpha=None, sigma=None):
         # get the shape of input data inorder to calc iternumber in SOM
-        iter_no = input_data.shape[0]*10
+        iter_no = input_data.shape[0]*2
         som = SOM(m, n, dim, weight_after_insertion, n_iterations= iter_no)
         trained_weight = som.train(input_data)
         mapped = som.map_vects(input_data)
